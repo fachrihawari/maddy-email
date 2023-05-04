@@ -31,13 +31,6 @@ services:
       - coolify-traefik-letsencrypt:/data:ro
       - maddydata:/out
 
-  # Hit /?admin for setup
-  # Webmail
-  rainloop:
-    image: hardware/rainloop
-    volumes:
-      - rainloop-data:/rainloop/data
-
   restarter:
     image: docker:cli
     volumes:
@@ -47,6 +40,5 @@ services:
 
 volumes:
   maddydata:
-  rainloop-data:
   coolify-traefik-letsencrypt: # Wherever you store your acme.json file from traefik
     external: true
