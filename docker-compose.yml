@@ -1,0 +1,73 @@
+version: "3.5"
+services:
+  maddy:
+    image: foxcpp/maddy:latest
+    ports:
+      - "25:25"
+      - "143:143"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - maddydata:/data
+    environment:
+        # REPLACE DOMAINS WITH YOURS
+      - MADDY_HOSTNAME=mx.hawari.dev
+      - MADDY_DOMAIN=hawari.dev
+    deploy:
+      replicas: 1
+      resources:
+        limits: { cpus: '0.2', memory: '32M' }
+        reservations: { cpus: '0.05', memory: '16M' }
+
+  # Hit /?admin for setup
+  # Webmail
+  rainloop:
+    image: hardware/rainloop
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-net"
+        - "traefik.http.routers.rainloop.rule=Host(`mail.hawari.dev`)"
+        - "traefik.http.services.rainloop.loadbalancer.server.port=8888"
+        - "traefik.http.routers.rainloop.entrypoints=websecure"
+      resources:
+        limits: { cpus: '0.2', memory: '64M' }
+        reservations: { cpus: '0.05', memory: '32M' }
+    volumes:
+      - rainloop-data:/rainloop/data
+    networks:
+      - traefik-net
+      - default
+
+  # Synchronize certificates from traefik/acme.json to maddy every 24 hours
+  certsync:
+    image: stedolan/jq
+    entrypoint: |
+      /bin/bash -c "
+        jq -r '.le.Certificates[] | select(.domain.main==\"'mx.hawari.dev'\") | .certificate' /data/acme.json | base64 -d > /out/tls_cert.pem;
+        jq -r '.le.Certificates[] | select(.domain.main==\"'mx.hawari.dev'\") | .key' /data/acme.json | base64 -d > /out/tls_key.pem;
+      "
+    volumes:
+      - common_letsencrypt:/data:ro
+      - maddydata:/out
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.role==manager]
+      restart_policy:
+        delay: 24h
+      resources:
+        limits: { cpus: '0.1', memory: '32M' }
+        reservations: { cpus: '0.025', memory: '16M' }
+
+networks:
+  # The network that can talk to traefik
+  traefik-net:
+    external: true
+    name: traefik-net
+
+volumes:
+  maddydata: {}
+  rainloop-data: {}
+  common_letsencrypt: # Wherever you store your acme.json file from traefik
+    external: true
